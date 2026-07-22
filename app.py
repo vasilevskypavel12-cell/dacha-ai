@@ -14,50 +14,53 @@ APP_TITLE = "Дачный советник"
 MAX_IMAGE_SIZE = 8 * 1024 * 1024
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
-PRIMARY_MAX_OUTPUT_TOKENS = 1400
-RETRY_MAX_OUTPUT_TOKENS = 2400
+PRIMARY_MAX_OUTPUT_TOKENS = 1100
+RETRY_MAX_OUTPUT_TOKENS = 2200
 
 app = FastAPI(title=APP_TITLE)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 SYSTEM_PROMPT = """
-Ты — практичный помощник для садоводов. Отвечай по-русски, коротко,
-понятно и без канцелярита. Пользователь должен за 20 секунд понять,
-что вероятнее всего произошло и что делать дальше.
+Ты — опытный садовод, который спокойно отвечает человеку в обычной переписке.
+Пиши по-русски, естественно, тепло и по делу. Ответ должен звучать как совет
+знакомого специалиста, а не как отчёт нейросети, медицинское заключение или
+инструкция из справочника.
 
-Основные правила:
-1. Не повторяй сведения пользователя и не пересказывай вопрос.
-2. Не используй латинские названия, если без них можно обойтись.
-3. Не перечисляй много маловероятных причин. Назови одну основную причину
-   и максимум две альтернативы только тогда, когда они действительно важны.
-4. Не дублируй один совет в разных разделах.
-5. Не пиши длинных вступлений и общих фраз.
-6. Если фотографии нет или её недостаточно, одной короткой фразой укажи,
-   что оценка предварительная, и задай максимум два самых полезных вопроса.
-7. Не придумывай дозировки препаратов. При необходимости рекомендуй средство
-   по типу действия и проси соблюдать инструкцию производителя.
-8. Давай только безопасные действия. При серьёзном или массовом поражении
-   коротко укажи, когда нужен агроном.
-9. Обычный ответ должен занимать 120–220 слов. Не добавляй разделы,
-   в которых нет полезной информации.
+Правила ответа:
+1. Начинай сразу с человеческого вывода: «Похоже, ...», «Скорее всего, ...»
+   или «По описанию это может быть ...».
+2. Не используй выражения «уровень уверенности», «предварительная оценка»,
+   «возможные причины с вероятностью», «пользователь сообщил» и другой канцелярит.
+3. Не пересказывай вопрос и не повторяй одни и те же советы.
+4. Назови одну наиболее вероятную причину. Альтернативу упоминай только тогда,
+   когда её действительно легко перепутать с основной проблемой.
+5. Если фотографии нет или по ней нельзя уверенно определить причину, скажи
+   естественно: «Без фото точно не скажу» или «По этому снимку не всё видно».
+6. Дай 3–4 конкретных действия в порядке выполнения. Одно действие — одна
+   короткая мысль.
+7. Задавай максимум один уточняющий вопрос, только если без него нельзя выбрать
+   безопасное действие.
+8. Не используй латинские названия без необходимости. Не придумывай дозировки
+   препаратов; советуй следовать инструкции на упаковке.
+9. Не пугай человека и не перечисляй длинный список запретов. Оставь только одно
+   важное предупреждение, если оно действительно нужно.
+10. Весь ответ — обычно 80–140 слов, абсолютный максимум 170 слов.
 
-Всегда используй этот формат Markdown:
+Формат Markdown:
 
-## Вероятная проблема
-Один короткий вывод. Укажи уверенность словами: высокая, средняя или низкая.
-Если фото нет, добавь: «Без фотографии оценка предварительная».
+Первый короткий абзац без заголовка: что, скорее всего, происходит и почему.
 
-## Что сделать сейчас
-От 3 до 5 конкретных нумерованных действий в правильном порядке.
+## Что сделать
+3–4 нумерованных коротких действия.
 
-## Что проверить
-До 3 коротких пунктов. Добавляй этот раздел только при необходимости.
+## На что посмотреть
+До двух коротких пунктов. Добавляй только если это помогает подтвердить причину.
 
-## Когда оценить результат
-Один короткий срок и понятный признак улучшения.
+## Когда проверить
+Одна короткая фраза: через сколько дней и какой признак покажет улучшение.
 
-## Важно
-Одна короткая мера предосторожности. Не повторяй стандартные предупреждения.
+Не добавляй пустые разделы и не заканчивай общими фразами вроде
+«надеюсь, это поможет» или «обратитесь к специалисту» без конкретной причины.
 """.strip()
 
 
@@ -79,12 +82,32 @@ def extract_response_text(response: Any) -> str:
     return "\n".join(chunks).strip()
 
 
-def create_openai_response(client: OpenAI, user_content: list[dict], max_tokens: int):
+def incomplete_reason(response: Any) -> Optional[str]:
+    if getattr(response, "status", None) != "incomplete":
+        return None
+    details = getattr(response, "incomplete_details", None)
+    return getattr(details, "reason", None) if details else None
+
+
+def create_openai_response(
+    client: OpenAI,
+    user_content: list[dict],
+    max_tokens: int,
+    retry: bool = False,
+):
+    instructions = SYSTEM_PROMPT
+    if retry:
+        instructions += (
+            "\n\nПредыдущая попытка не завершилась. Дай законченный ответ строго до "
+            "130 слов. Лучше убрать второстепенный совет, чем оборвать фразу."
+        )
+
     return client.responses.create(
         model=MODEL,
-        instructions=SYSTEM_PROMPT,
+        instructions=instructions,
         input=[{"role": "user", "content": user_content}],
         reasoning={"effort": "minimal"},
+        text={"verbosity": "low"},
         max_output_tokens=max_tokens,
     )
 
@@ -105,13 +128,13 @@ def build_user_text(
     region: Optional[str],
     growing_place: Optional[str],
 ) -> str:
-    parts = [f"Проблема пользователя: {question.strip()}"]
+    parts = [f"Проблема: {question.strip()}"]
     if plant and plant.strip():
-        parts.append(f"Растение или культура: {plant.strip()}")
+        parts.append(f"Растение: {plant.strip()}")
     if region and region.strip():
         parts.append(f"Регион: {region.strip()}")
     if growing_place and growing_place.strip():
-        parts.append(f"Место выращивания: {growing_place.strip()}")
+        parts.append(f"Где растёт: {growing_place.strip()}")
     return "\n".join(parts)
 
 
@@ -182,32 +205,29 @@ async def ask_ai(
             client, user_content, PRIMARY_MAX_OUTPUT_TOKENS
         )
         answer = extract_response_text(response)
+        reason = incomplete_reason(response)
 
-        # GPT-5 mini иногда расходует малый лимит на рассуждение и не успевает
-        # вывести текст. В таком случае автоматически повторяем запрос с запасом.
-        if not answer:
+        # Даже если API вернул часть текста, не показываем оборванный ответ.
+        # При нехватке лимита повторяем запрос и просим законченный короткий совет.
+        if not answer or reason == "max_output_tokens":
             response = create_openai_response(
-                client, user_content, RETRY_MAX_OUTPUT_TOKENS
+                client,
+                user_content,
+                RETRY_MAX_OUTPUT_TOKENS,
+                retry=True,
             )
             answer = extract_response_text(response)
+            reason = incomplete_reason(response)
     except Exception as exc:
-        # Не отправляем пользователю содержимое ключа или внутренние данные.
         raise HTTPException(
             status_code=502,
             detail=f"Не удалось получить ответ от OpenAI: {type(exc).__name__}.",
         ) from exc
 
-    if not answer:
-        status = getattr(response, "status", "неизвестен")
-        incomplete = getattr(response, "incomplete_details", None)
-        reason = getattr(incomplete, "reason", None) if incomplete else None
-        safe_reason = f" Причина: {reason}." if reason else ""
+    if not answer or reason == "max_output_tokens":
         raise HTTPException(
             status_code=502,
-            detail=(
-                "OpenAI не сформировал текст ответа после повторной попытки. "
-                f"Статус: {status}.{safe_reason}"
-            ),
+            detail="Нейросеть не успела закончить ответ. Повторите запрос ещё раз.",
         )
 
     return {"answer": answer, "model": MODEL}
