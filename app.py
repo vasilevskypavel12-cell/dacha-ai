@@ -1,6 +1,6 @@
 import base64
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -14,6 +14,8 @@ APP_TITLE = "Дачный советник"
 MAX_IMAGE_SIZE = 8 * 1024 * 1024
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+PRIMARY_MAX_OUTPUT_TOKENS = 1400
+RETRY_MAX_OUTPUT_TOKENS = 2400
 
 app = FastAPI(title=APP_TITLE)
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -57,6 +59,34 @@ SYSTEM_PROMPT = """
 ## Важно
 Одна короткая мера предосторожности. Не повторяй стандартные предупреждения.
 """.strip()
+
+
+def extract_response_text(response: Any) -> str:
+    """Извлекает итоговый текст из Responses API с резервным разбором output."""
+    direct_text = getattr(response, "output_text", None)
+    if isinstance(direct_text, str) and direct_text.strip():
+        return direct_text.strip()
+
+    chunks: list[str] = []
+    for item in getattr(response, "output", None) or []:
+        if getattr(item, "type", None) != "message":
+            continue
+        for content in getattr(item, "content", None) or []:
+            if getattr(content, "type", None) == "output_text":
+                text = getattr(content, "text", None)
+                if isinstance(text, str) and text.strip():
+                    chunks.append(text.strip())
+    return "\n".join(chunks).strip()
+
+
+def create_openai_response(client: OpenAI, user_content: list[dict], max_tokens: int):
+    return client.responses.create(
+        model=MODEL,
+        instructions=SYSTEM_PROMPT,
+        input=[{"role": "user", "content": user_content}],
+        reasoning={"effort": "minimal"},
+        max_output_tokens=max_tokens,
+    )
 
 
 def get_client() -> OpenAI:
@@ -148,12 +178,18 @@ async def ask_ai(
     client = get_client()
 
     try:
-        response = client.responses.create(
-            model=MODEL,
-            instructions=SYSTEM_PROMPT,
-            input=[{"role": "user", "content": user_content}],
-            max_output_tokens=850,
+        response = create_openai_response(
+            client, user_content, PRIMARY_MAX_OUTPUT_TOKENS
         )
+        answer = extract_response_text(response)
+
+        # GPT-5 mini иногда расходует малый лимит на рассуждение и не успевает
+        # вывести текст. В таком случае автоматически повторяем запрос с запасом.
+        if not answer:
+            response = create_openai_response(
+                client, user_content, RETRY_MAX_OUTPUT_TOKENS
+            )
+            answer = extract_response_text(response)
     except Exception as exc:
         # Не отправляем пользователю содержимое ключа или внутренние данные.
         raise HTTPException(
@@ -161,11 +197,17 @@ async def ask_ai(
             detail=f"Не удалось получить ответ от OpenAI: {type(exc).__name__}.",
         ) from exc
 
-    answer = (response.output_text or "").strip()
     if not answer:
+        status = getattr(response, "status", "неизвестен")
+        incomplete = getattr(response, "incomplete_details", None)
+        reason = getattr(incomplete, "reason", None) if incomplete else None
+        safe_reason = f" Причина: {reason}." if reason else ""
         raise HTTPException(
             status_code=502,
-            detail="Нейросеть вернула пустой ответ. Попробуйте ещё раз.",
+            detail=(
+                "OpenAI не сформировал текст ответа после повторной попытки. "
+                f"Статус: {status}.{safe_reason}"
+            ),
         )
 
     return {"answer": answer, "model": MODEL}
