@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Тестовый ИИ-помощник для садоводов" />
+  <title>Дачный советник</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">🌿</span>
+      <div>
+        <strong>Дачный советник</strong>
+        <small>Предварительная диагностика растений</small>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="badge">Тестовая версия</span>
+        <h1>Опишите проблему растения и получите план действий</h1>
+        <p>
+          Добавьте фотографию, укажите растение и регион. ИИ проанализирует
+          симптомы, назовёт вероятные причины и подскажет, что проверить.
+        </p>
+      </div>
+      <div class="hero-card">
+        <div>1</div><span>Загрузите фото</span>
+        <div>2</div><span>Опишите симптомы</span>
+        <div>3</div><span>Получите рекомендации</span>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <form id="diagnosis-form" class="panel form-panel">
+        <div class="panel-heading">
+          <h2>Новая консультация</h2>
+          <p>Фото необязательно, но оно повышает полезность ответа.</p>
+        </div>
+
+        <label>
+          <span>Что случилось? *</span>
+          <textarea
+            name="question"
+            id="question"
+            minlength="5"
+            maxlength="4000"
+            required
+            placeholder="Например: на нижних листьях томата появились бурые пятна, листья постепенно сохнут..."
+          ></textarea>
+        </label>
+
+        <div class="grid-two">
+          <label>
+            <span>Растение</span>
+            <input name="plant" placeholder="Томат, огурец, яблоня..." />
+          </label>
+          <label>
+            <span>Регион</span>
+            <input name="region" placeholder="Брянская область" />
+          </label>
+        </div>
+
+        <label>
+          <span>Где растёт</span>
+          <select name="growing_place">
+            <option value="">Не указано</option>
+            <option>Открытый грунт</option>
+            <option>Теплица</option>
+            <option>Дом или подоконник</option>
+            <option>Сад</option>
+          </select>
+        </label>
+
+        <label class="upload" id="upload-zone">
+          <input id="image" name="image" type="file" accept="image/jpeg,image/png,image/webp" />
+          <div id="upload-placeholder">
+            <strong>Добавить фотографию</strong>
+            <span>JPG, PNG или WEBP, до 8 МБ</span>
+          </div>
+          <img id="preview" alt="Предпросмотр фотографии" hidden />
+          <button type="button" id="remove-image" hidden>Удалить фото</button>
+        </label>
+
+        <button class="primary" id="submit-button" type="submit">
+          <span>Получить рекомендацию</span>
+        </button>
+
+        <p class="notice">
+          Ответ ИИ носит предварительный характер. Не превышайте дозировки
+          препаратов и сверяйтесь с инструкцией производителя.
+        </p>
+      </form>
+
+      <section class="panel answer-panel" aria-live="polite">
+        <div class="panel-heading">
+          <h2>Ответ помощника</h2>
+          <p id="answer-status">Здесь появится результат анализа.</p>
+        </div>
+
+        <div id="empty-state" class="empty-state">
+          <div class="empty-icon">🍅</div>
+          <strong>Пока нет консультации</strong>
+          <span>Заполните форму слева и нажмите кнопку.</span>
+        </div>
+
+        <div id="loading-state" class="loading-state" hidden>
+          <div class="spinner"></div>
+          <strong>Анализируем информацию…</strong>
+          <span>Это может занять некоторое время.</span>
+        </div>
+
+        <article id="answer" class="answer" hidden></article>
+        <div id="error" class="error" hidden></div>
+      </section>
+    </section>
+  </main>
+
+  <footer>
+    Тестовый сервис. Запросы не сохраняются в базе данных.
+  </footer>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
