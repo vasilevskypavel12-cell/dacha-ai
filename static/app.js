@@ -61,6 +61,81 @@ function resetLoading() {
   submitButton.querySelector('span').textContent = 'Получить рекомендацию';
 }
 
+
+function escapeHtml(value) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function formatInline(value) {
+  return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+function renderAnswer(markdown) {
+  const lines = markdown.replace(/\r/g, '').split('\n');
+  const sections = [];
+  let section = { title: '', items: [], paragraphs: [] };
+
+  const pushSection = () => {
+    if (section.title || section.items.length || section.paragraphs.length) {
+      sections.push(section);
+    }
+    section = { title: '', items: [], paragraphs: [] };
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (line.startsWith('## ')) {
+      pushSection();
+      section.title = line.slice(3).trim();
+      continue;
+    }
+
+    const numbered = line.match(/^\d+[.)]\s+(.+)$/);
+    const bullet = line.match(/^[-•]\s+(.+)$/);
+    if (numbered) {
+      section.items.push({ type: 'number', text: numbered[1] });
+    } else if (bullet) {
+      section.items.push({ type: 'bullet', text: bullet[1] });
+    } else {
+      section.paragraphs.push(line);
+    }
+  }
+  pushSection();
+
+  if (!sections.length) {
+    answerElement.textContent = markdown;
+    return;
+  }
+
+  answerElement.innerHTML = sections.map((item, index) => {
+    const title = item.title
+      ? `<h3>${formatInline(item.title)}</h3>`
+      : index === 0 ? '<h3>Рекомендация</h3>' : '';
+    const paragraphs = item.paragraphs
+      .map((text) => `<p>${formatInline(text)}</p>`)
+      .join('');
+
+    const numberedItems = item.items.filter((entry) => entry.type === 'number');
+    const bulletItems = item.items.filter((entry) => entry.type === 'bullet');
+    const numberedList = numberedItems.length
+      ? `<ol>${numberedItems.map((entry) => `<li>${formatInline(entry.text)}</li>`).join('')}</ol>`
+      : '';
+    const bulletList = bulletItems.length
+      ? `<ul>${bulletItems.map((entry) => `<li>${formatInline(entry.text)}</li>`).join('')}</ul>`
+      : '';
+
+    const importantClass = item.title.toLowerCase().includes('важно') ? ' answer-card--important' : '';
+    return `<section class="answer-card${importantClass}">${title}${paragraphs}${numberedList}${bulletList}</section>`;
+  }).join('');
+}
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   showLoading();
@@ -82,7 +157,7 @@ form.addEventListener('submit', async (event) => {
       throw new Error(payload.detail || 'Не удалось получить рекомендацию.');
     }
 
-    answerElement.textContent = payload.answer;
+    renderAnswer(payload.answer);
     answerElement.hidden = false;
     answerStatus.textContent = `Ответ сформирован моделью ${payload.model}.`;
   } catch (error) {

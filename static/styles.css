@@ -229,11 +229,52 @@ textarea:focus, input:focus, select:focus {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .answer {
-  white-space: pre-wrap;
-  line-height: 1.72;
+  display: grid;
+  gap: 13px;
   font-size: 16px;
   overflow-wrap: anywhere;
 }
+
+.answer-card {
+  padding: 17px 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-soft);
+}
+
+.answer-card h3 {
+  margin: 0 0 9px;
+  font-size: 17px;
+  line-height: 1.25;
+  color: var(--brand-dark);
+}
+
+.answer-card p {
+  margin: 0;
+  line-height: 1.58;
+}
+
+.answer-card p + p { margin-top: 8px; }
+
+.answer-card ol,
+.answer-card ul {
+  margin: 0;
+  padding-left: 23px;
+}
+
+.answer-card li {
+  padding-left: 3px;
+  line-height: 1.55;
+}
+
+.answer-card li + li { margin-top: 7px; }
+
+.answer-card--important {
+  border-color: #e4d6a6;
+  background: #fffaf0;
+}
+
+.answer-card--important h3 { color: #765d12; }
 
 .error {
   padding: 15px;
