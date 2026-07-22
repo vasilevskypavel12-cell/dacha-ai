@@ -307,3 +307,24 @@ footer {
   .panel { padding: 19px; border-radius: 18px; }
   .hero-copy p { font-size: 16px; }
 }
+
+/* v4: ответ всегда участвует в обычной прокрутке страницы и не обрезается. */
+.answer-panel {
+  position: static;
+  min-height: 560px;
+}
+
+.answer-card--lead {
+  border: 0;
+  padding: 4px 2px 8px;
+  background: transparent;
+  font-size: 17px;
+}
+
+.answer-card--lead h3 {
+  display: none;
+}
+
+.answer-card--lead p {
+  line-height: 1.65;
+}

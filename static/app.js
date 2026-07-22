@@ -52,7 +52,7 @@ function showLoading() {
   loadingState.hidden = false;
   submitButton.disabled = true;
   submitButton.querySelector('span').textContent = 'Анализируем…';
-  answerStatus.textContent = 'ИИ изучает описание и фотографию.';
+  answerStatus.textContent = 'Смотрю описание и фотографию…';
 }
 
 function resetLoading() {
@@ -131,8 +131,10 @@ function renderAnswer(markdown) {
       ? `<ul>${bulletItems.map((entry) => `<li>${formatInline(entry.text)}</li>`).join('')}</ul>`
       : '';
 
-    const importantClass = item.title.toLowerCase().includes('важно') ? ' answer-card--important' : '';
-    return `<section class="answer-card${importantClass}">${title}${paragraphs}${numberedList}${bulletList}</section>`;
+    const normalizedTitle = item.title.toLowerCase();
+    const importantClass = normalizedTitle.includes('важно') ? ' answer-card--important' : '';
+    const leadClass = !item.title && index === 0 ? ' answer-card--lead' : '';
+    return `<section class="answer-card${importantClass}${leadClass}">${title}${paragraphs}${numberedList}${bulletList}</section>`;
   }).join('');
 }
 
@@ -159,7 +161,7 @@ form.addEventListener('submit', async (event) => {
 
     renderAnswer(payload.answer);
     answerElement.hidden = false;
-    answerStatus.textContent = `Ответ сформирован моделью ${payload.model}.`;
+    answerStatus.textContent = 'Готово. Ниже — самое важное без лишней теории.';
   } catch (error) {
     errorElement.textContent = error.message || 'Произошла неизвестная ошибка.';
     errorElement.hidden = false;
